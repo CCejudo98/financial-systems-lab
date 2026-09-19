@@ -10,14 +10,13 @@ class HierarchicalRiskParity:
         self.corr = self.returns.corr()
 
     def _get_distance_matrix(self) -> np.ndarray:
-        # Calcular matriz de distancia angular d_ij = sqrt(2 * (1 - rho_ij))
+        # Distancia angular d_ij = sqrt(2 * (1 - rho_ij))
         dist = np.sqrt(np.clip(2 * (1 - self.corr.values), 0, None))
-        # Forzar simetría numérica exacta para evitar errores de precisión flotante en SciPy
+        # Simetrización explícita para evitar errores de precisión flotante en SciPy
         dist = (dist + dist.T) / 2.0
         return dist
 
     def _get_quasi_diag(self, link: np.ndarray) -> list:
-        # Reordenamiento jerárquico de activos
         link = link.astype(int)
         sort_ix = pd.Series([link[-1, 0], link[-1, 1]])
         num_items = link[-1, 3]
@@ -34,8 +33,8 @@ class HierarchicalRiskParity:
         return sort_ix.tolist()
 
     def _get_cluster_var(self, cov: pd.DataFrame, c_items: list) -> float:
-        # Varianza inversa del clúster
-        cov_slice = cov.iloc[c_items, c_items]
+        # Se usa .loc porque c_items contiene nombres de tickers
+        cov_slice = cov.loc[c_items, c_items]
         ivp = 1.0 / np.diag(cov_slice)
         ivp /= ivp.sum()
         w = ivp.reshape(-1, 1)
@@ -43,7 +42,6 @@ class HierarchicalRiskParity:
         return cluster_var
 
     def _get_rec_bisection(self, cov: pd.DataFrame, sort_ix: list) -> pd.Series:
-        # Bisección recursiva para asignación de pesos
         w = pd.Series(1.0, index=sort_ix)
         c_items = [sort_ix]
         while len(c_items) > 0:
@@ -60,7 +58,6 @@ class HierarchicalRiskParity:
 
     def allocate(self) -> pd.Series:
         dist = self._get_distance_matrix()
-        # Transformar a formato condensado que exige scipy pdist/linkage
         sq_dist = sch.distance.squareform(dist, checks=False)
         link = sch.linkage(sq_dist, method='ward')
         sort_ix = self._get_quasi_diag(link)
@@ -72,5 +69,4 @@ class HierarchicalRiskParity:
         dist = self._get_distance_matrix()
         dist_df = pd.DataFrame(dist, index=self.corr.index, columns=self.corr.columns)
         G = nx.from_pandas_adjacency(dist_df)
-        mst = nx.minimum_spanning_tree(G)
-        return mst
+        return nx.minimum_spanning_tree(G)
